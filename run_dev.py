@@ -10,6 +10,7 @@ from mim.mcm.infrastructure.repositories import (
     SQLiteResolutionRepository,
     SQLiteQueueRepository,
     SQLitePlaybackStateRepository,
+    SQLiteLyricsRepository,
 )
 from mim.mcm.application.library_service import LibraryService, Scanner
 from mim.mcm.application.source_resolvers import (
@@ -22,6 +23,7 @@ from mim.mcm.application.source_resolvers import (
 from mim.mcm.application.resolution_service import ResolutionService, ResolutionConfig
 from mim.mcm.application.release_service import ReleaseService
 from mim.mcm.application.playback_service import PlaybackService, MutagenAudioBackend, ResolutionApplicationService
+from mim.mcm.application.lyrics_service import LyricsService, LocalLyricsProvider, EmbeddedLyricsProvider
 from mim.mcm.infrastructure.watcher import DirectoryWatcher
 
 
@@ -37,6 +39,7 @@ release_repo = SQLiteReleaseRepository(conn)
 resolution_repo = SQLiteResolutionRepository(conn)
 queue_repo = SQLiteQueueRepository(conn)
 state_repo = SQLitePlaybackStateRepository(conn)
+lyrics_repo = SQLiteLyricsRepository(conn)
 
 # 2. Configurar serviços de aplicação
 library_service = LibraryService(library_repo)
@@ -86,6 +89,17 @@ resolution_app_service = ResolutionApplicationService(
     library_repo=library_repo,
 )
 
+# Lyrics services
+local_lyrics_provider = LocalLyricsProvider(library_repo)
+embedded_lyrics_provider = EmbeddedLyricsProvider(library_repo, source_repo)
+
+lyrics_service = LyricsService(
+    lyrics_repo=lyrics_repo,
+    providers=[local_lyrics_provider, embedded_lyrics_provider],
+    version_repo=version_repo,
+    identity_repo=identity_repo,
+)
+
 # 3. Escaneamento inicial
 musicas_dir = "/home/miguel/Músicas"
 scanner = Scanner(library_service)
@@ -109,6 +123,7 @@ try:
     print("  - ResolverChain (local->cache->remote->download)")
     print("  - PlaybackService (queue, repeat, shuffle, seek, volume)")
     print("  - ResolutionApplicationService (resolve + play)")
+    print("  - LyricsService (synced/unsynced, local/embedded/remote)")
     pass
 finally:
     watcher.stop()

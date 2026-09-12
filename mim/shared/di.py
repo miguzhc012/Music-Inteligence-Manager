@@ -1,0 +1,1 @@
+"""Dependency injection container placeholder (not used in FASE 0)."""

@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: mim
+Version: 0.1.0
+Summary: MIM – Music Integration Manager
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"

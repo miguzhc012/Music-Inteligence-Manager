@@ -1,0 +1,32 @@
+from abc import ABC, abstractmethod
+from .identity import Identity
+from .version import Version
+from .source import Source
+
+class IdentityRepository(ABC):
+    @abstractmethod
+    def get(self, identity_id: str) -> Identity: ...
+    @abstractmethod
+    def add(self, identity: Identity) -> None: ...
+
+class VersionRepository(ABC):
+    @abstractmethod
+    def get(self, version_id: str) -> Version: ...
+    @abstractmethod
+    def add(self, version: Version) -> None: ...
+
+class SourceRepository(ABC):
+    @abstractmethod
+    def get(self, source_id: str) -> Source: ...
+    @abstractmethod
+    def add(self, source: Source) -> None: ...
+
+class IndexPublisher(ABC):
+    """Publica o índice replicado do MCM para o MCL."""
+    @abstractmethod
+    def publish(self, entries: list) -> None: ...
+
+class SourceResolver(ABC):
+    """Contrato para resolução de Source a partir de uma Version. Sem implementação."""
+    @abstractmethod
+    def resolve(self, version_id: str) -> str | None: ...

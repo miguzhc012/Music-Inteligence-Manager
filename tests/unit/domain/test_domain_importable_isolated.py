@@ -1,0 +1,11 @@
+def test_domain_importable_without_infrastructure():
+    import mim.mcm.domain.identity
+    import mim.mcm.domain.version
+    import mim.mcm.domain.source
+    import mim.mcm.domain.materialization
+    import mim.mcm.domain.availability
+    import mim.mcm.domain.confidence
+    import mim.mcl.domain.device
+    import mim.mcl.domain.session
+    import mim.mcl.domain.permission
+    assert True

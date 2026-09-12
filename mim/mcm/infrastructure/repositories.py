@@ -10,6 +10,7 @@ from mim.mcm.domain.resolution import Resolution, Evidence, EvidenceType
 from mim.mcm.domain.library import LibraryEntry, FileStatus
 from mim.mcm.domain.playback import QueueItem, PlaybackState, PlaybackPosition, PlaybackConfig, RepeatMode, ShuffleMode
 from mim.mcm.domain.lyrics import Lyrics, LyricsLine, LyricsType, LyricsSource
+from mim.mcm.domain.materialization import Materialization, MaterializationState, MaterializationQuality, DeviceStorage
 from mim.mcm.domain.ports import (
     IdentityRepository,
     VersionRepository,
@@ -675,3 +676,169 @@ class SQLiteLyricsRepository:
         self._conn.execute("DELETE FROM lyrics WHERE version_id = ?", (version_id,))
         self._conn.execute("DELETE FROM lyrics_lines WHERE version_id = ?", (version_id,))
         self._conn.commit()
+
+
+class SQLiteMaterializationRepository:
+    """Implementação SQLite do repositório de materializações."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def get(self, source_id: str, device_id: str | None = None) -> Optional[Materialization]:
+        if device_id:
+            row = self._conn.execute(
+                "SELECT id, source_id, device_id, state, file_path, quality, format, bitrate, sample_rate, bit_depth, file_size, checksum, created_at, updated_at FROM materializations WHERE source_id = ? AND device_id = ?",
+                (source_id, device_id),
+            ).fetchone()
+        else:
+            row = self._conn.execute(
+                "SELECT id, source_id, device_id, state, file_path, quality, format, bitrate, sample_rate, bit_depth, file_size, checksum, created_at, updated_at FROM materializations WHERE source_id = ? ORDER BY CASE state WHEN 'downloaded' THEN 0 WHEN 'cached' THEN 1 ELSE 2 END LIMIT 1",
+                (source_id,),
+            ).fetchone()
+
+        if not row:
+            return None
+
+        return Materialization(
+            source_id=row["source_id"],
+            state=MaterializationState(row["state"]),
+            file_path=row["file_path"],
+            device_id=row["device_id"],
+            quality=MaterializationQuality(row["quality"]),
+            format=row["format"],
+            bitrate=row["bitrate"],
+            sample_rate=row["sample_rate"],
+            bit_depth=row["bit_depth"],
+            file_size=row["file_size"],
+            checksum=row["checksum"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def add(self, materialization: Materialization) -> None:
+        mat_id = str(uuid4())
+        self._conn.execute(
+            "INSERT INTO materializations (id, source_id, device_id, state, file_path, quality, format, bitrate, sample_rate, bit_depth, file_size, checksum, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+            (mat_id, materialization.source_id, materialization.device_id, materialization.state.value, materialization.file_path, materialization.quality.value, materialization.format, materialization.bitrate, materialization.sample_rate, materialization.bit_depth, materialization.file_size, materialization.checksum),
+        )
+        self._conn.commit()
+
+    def update(self, materialization: Materialization) -> None:
+        self._conn.execute(
+            "UPDATE materializations SET device_id = ?, state = ?, file_path = ?, quality = ?, format = ?, bitrate = ?, sample_rate = ?, bit_depth = ?, file_size = ?, checksum = ?, updated_at = CURRENT_TIMESTAMP WHERE source_id = ? AND device_id = ?",
+            (materialization.device_id, materialization.state.value, materialization.file_path, materialization.quality.value, materialization.format, materialization.bitrate, materialization.sample_rate, materialization.bit_depth, materialization.file_size, materialization.checksum, materialization.source_id, materialization.device_id),
+        )
+        self._conn.commit()
+
+    def delete(self, source_id: str, device_id: str | None = None) -> None:
+        if device_id:
+            self._conn.execute("DELETE FROM materializations WHERE source_id = ? AND device_id = ?", (source_id, device_id))
+        else:
+            self._conn.execute("DELETE FROM materializations WHERE source_id = ?", (source_id,))
+        self._conn.commit()
+
+    def get_by_device(self, device_id: str) -> List[Materialization]:
+        rows = self._conn.execute(
+            "SELECT id, source_id, device_id, state, file_path, quality, format, bitrate, sample_rate, bit_depth, file_size, checksum, created_at, updated_at FROM materializations WHERE device_id = ?",
+            (device_id,),
+        ).fetchall()
+
+        return [
+            Materialization(
+                source_id=row["source_id"],
+                state=MaterializationState(row["state"]),
+                file_path=row["file_path"],
+                device_id=row["device_id"],
+                quality=MaterializationQuality(row["quality"]),
+                format=row["format"],
+                bitrate=row["bitrate"],
+                sample_rate=row["sample_rate"],
+                bit_depth=row["bit_depth"],
+                file_size=row["file_size"],
+                checksum=row["checksum"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            )
+            for row in rows
+        ]
+
+    def get_available_for_source(self, source_id: str) -> List[Materialization]:
+        rows = self._conn.execute(
+            "SELECT id, source_id, device_id, state, file_path, quality, format, bitrate, sample_rate, bit_depth, file_size, checksum, created_at, updated_at FROM materializations WHERE source_id = ? AND state IN ('cached', 'downloaded')",
+            (source_id,),
+        ).fetchall()
+
+        return [
+            Materialization(
+                source_id=row["source_id"],
+                state=MaterializationState(row["state"]),
+                file_path=row["file_path"],
+                device_id=row["device_id"],
+                quality=MaterializationQuality(row["quality"]),
+                format=row["format"],
+                bitrate=row["bitrate"],
+                sample_rate=row["sample_rate"],
+                bit_depth=row["bit_depth"],
+                file_size=row["file_size"],
+                checksum=row["checksum"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
+            )
+            for row in rows
+        ]
+
+
+class SQLiteDeviceStorageRepository:
+    """Implementação SQLite do repositório de device storage."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def get(self, device_id: str) -> Optional[DeviceStorage]:
+        row = self._conn.execute(
+            "SELECT device_id, total_bytes, free_bytes, path FROM device_storage WHERE device_id = ?",
+            (device_id,),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        return DeviceStorage(
+            device_id=row["device_id"],
+            total_bytes=row["total_bytes"],
+            free_bytes=row["free_bytes"],
+            path=row["path"],
+        )
+
+    def add(self, storage: DeviceStorage) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO device_storage (device_id, total_bytes, free_bytes, path, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
+            (storage.device_id, storage.total_bytes, storage.free_bytes, storage.path),
+        )
+        self._conn.commit()
+
+    def update(self, storage: DeviceStorage) -> None:
+        self._conn.execute(
+            "UPDATE device_storage SET total_bytes = ?, free_bytes = ?, path = ?, updated_at = CURRENT_TIMESTAMP WHERE device_id = ?",
+            (storage.total_bytes, storage.free_bytes, storage.path, storage.device_id),
+        )
+        self._conn.commit()
+
+    def delete(self, device_id: str) -> None:
+        self._conn.execute("DELETE FROM device_storage WHERE device_id = ?", (device_id,))
+        self._conn.commit()
+
+    def list_all(self) -> List[DeviceStorage]:
+        rows = self._conn.execute(
+            "SELECT device_id, total_bytes, free_bytes, path FROM device_storage"
+        ).fetchall()
+
+        return [
+            DeviceStorage(
+                device_id=row["device_id"],
+                total_bytes=row["total_bytes"],
+                free_bytes=row["free_bytes"],
+                path=row["path"],
+            )
+            for row in rows
+        ]

@@ -12,7 +12,7 @@ def test_database_migrations_applied():
         
         # Check schema_version
         version = cursor.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-        assert version == 5
+        assert version == 6
         
         # Check tables existence
         tables = cursor.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
@@ -33,6 +33,8 @@ def test_database_migrations_applied():
             "playback_config",
             "lyrics",
             "lyrics_lines",
+            "materializations",
+            "device_storage",
         }
         
         assert expected_tables.issubset(table_names)

@@ -183,6 +183,35 @@ class SQLiteDatabase:
                 );
                 CREATE INDEX IF NOT EXISTS idx_lyrics_lines_version_order ON lyrics_lines(version_id, line_order);
                 """
+            ),
+            (
+                6,
+                """
+                CREATE TABLE IF NOT EXISTS materializations (
+                    id TEXT PRIMARY KEY,
+                    source_id TEXT NOT NULL,
+                    device_id TEXT,
+                    state TEXT NOT NULL CHECK (state IN ('unavailable', 'cached', 'downloaded')),
+                    file_path TEXT,
+                    quality TEXT NOT NULL CHECK (quality IN ('unknown', 'low', 'medium', 'high', 'lossless', 'hires')),
+                    format TEXT,
+                    bitrate INTEGER,
+                    sample_rate INTEGER,
+                    bit_depth INTEGER,
+                    file_size INTEGER,
+                    checksum TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (source_id) REFERENCES sources(id)
+                );
+                CREATE TABLE IF NOT EXISTS device_storage (
+                    device_id TEXT PRIMARY KEY,
+                    total_bytes INTEGER NOT NULL,
+                    free_bytes INTEGER NOT NULL,
+                    path TEXT NOT NULL,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+                """
             )
         ]
 

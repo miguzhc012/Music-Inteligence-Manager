@@ -8,6 +8,7 @@ from .release import Release, ReleaseTrack
 from .resolution import Resolution
 from .playback import QueueItem, PlaybackConfig, PlaybackState, PlaybackPosition
 from .lyrics import Lyrics, LyricsSearchQuery, LyricsType, LyricsSource
+from .materialization import Materialization, MaterializationState, MaterializationQuality, DeviceStorage
 
 
 class IdentityRepository(ABC):
@@ -195,3 +196,42 @@ class LyricsProvider(ABC):
 
     @abstractmethod
     def fetch_by_id(self, provider_id: str) -> Lyrics | None: ...
+
+
+class MaterializationRepository(ABC):
+    """Repositório para materializações (arquivos físicos de sources)."""
+    @abstractmethod
+    def get(self, source_id: str, device_id: str | None = None) -> Materialization | None: ...
+
+    @abstractmethod
+    def add(self, materialization: Materialization) -> None: ...
+
+    @abstractmethod
+    def update(self, materialization: Materialization) -> None: ...
+
+    @abstractmethod
+    def delete(self, source_id: str, device_id: str | None = None) -> None: ...
+
+    @abstractmethod
+    def get_by_device(self, device_id: str) -> list[Materialization]: ...
+
+    @abstractmethod
+    def get_available_for_source(self, source_id: str) -> list[Materialization]: ...
+
+
+class DeviceStorageRepository(ABC):
+    """Repositório para informações de armazenamento de dispositivos."""
+    @abstractmethod
+    def get(self, device_id: str) -> DeviceStorage | None: ...
+
+    @abstractmethod
+    def add(self, storage: DeviceStorage) -> None: ...
+
+    @abstractmethod
+    def update(self, storage: DeviceStorage) -> None: ...
+
+    @abstractmethod
+    def delete(self, device_id: str) -> None: ...
+
+    @abstractmethod
+    def list_all(self) -> list[DeviceStorage]: ...

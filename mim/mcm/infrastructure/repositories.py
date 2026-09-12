@@ -2,12 +2,120 @@ import sqlite3
 from typing import Optional, List
 from uuid import uuid4
 
+from mim.mcm.domain.identity import Identity
+from mim.mcm.domain.version import Version
+from mim.mcm.domain.source import Source, SourceType
 from mim.mcm.domain.release import Release, ReleaseTrack, ReleaseType
 from mim.mcm.domain.resolution import Resolution, Evidence, EvidenceType
 from mim.mcm.domain.library import LibraryEntry, FileStatus
-from mim.mcm.domain.ports import ReleaseRepository, ResolutionRepository, LibraryEntryRepository
+from mim.mcm.domain.ports import (
+    IdentityRepository,
+    VersionRepository,
+    SourceRepository,
+    ReleaseRepository,
+    ResolutionRepository,
+    LibraryEntryRepository,
+)
 from mim.mcm.domain.confidence import Confidence
 from mim.mcm.domain.availability import Availability, AvailabilityStatus
+
+
+class SQLiteIdentityRepository(IdentityRepository):
+    """Implementação SQLite do repositório de Identity."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def add(self, identity: Identity) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO identities (id, title, artist) VALUES (?, ?, ?)",
+            (identity.id, identity.title, identity.artist),
+        )
+        self._conn.commit()
+
+    def get(self, identity_id: str) -> Optional[Identity]:
+        row = self._conn.execute(
+            "SELECT id, title, artist FROM identities WHERE id = ?",
+            (identity_id,),
+        ).fetchone()
+
+        if row:
+            return Identity(id=row["id"], title=row["title"], artist=row["artist"])
+
+        return None
+
+
+class SQLiteVersionRepository(VersionRepository):
+    """Implementação SQLite do repositório de Version."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def add(self, version: Version) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO versions (id, identity_id, label) VALUES (?, ?, ?)",
+            (version.id, version.identity_id, version.label),
+        )
+        self._conn.commit()
+
+    def get(self, version_id: str) -> Optional[Version]:
+        row = self._conn.execute(
+            "SELECT id, identity_id, label FROM versions WHERE id = ?",
+            (version_id,),
+        ).fetchone()
+
+        if row:
+            return Version(
+                id=row["id"],
+                identity_id=row["identity_id"],
+                label=row["label"],
+            )
+
+        return None
+
+
+class SQLiteSourceRepository(SourceRepository):
+    """Implementação SQLite do repositório de Source."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def add(self, source: Source) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO sources (id, version_id, source_type) VALUES (?, ?, ?)",
+            (source.id, source.version_id, source.source_type.value),
+        )
+        self._conn.commit()
+
+    def get(self, source_id: str) -> Optional[Source]:
+        row = self._conn.execute(
+            "SELECT id, version_id, source_type FROM sources WHERE id = ?",
+            (source_id,),
+        ).fetchone()
+
+        if row:
+            return Source(
+                id=row["id"],
+                version_id=row["version_id"],
+                source_type=SourceType(row["source_type"]),
+            )
+
+        return None
+
+    def get_by_version(self, version_id: str) -> List[Source]:
+        rows = self._conn.execute(
+            "SELECT id, version_id, source_type FROM sources WHERE version_id = ?",
+            (version_id,),
+        ).fetchall()
+
+        return [
+            Source(
+                id=row["id"],
+                version_id=row["version_id"],
+                source_type=SourceType(row["source_type"]),
+            )
+            for row in rows
+        ]
 
 
 class SQLiteLibraryEntryRepository(LibraryEntryRepository):
@@ -87,41 +195,6 @@ class SQLiteReleaseRepository(ReleaseRepository):
 
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
-
-    def _ensure_tables(self) -> None:
-        cursor = self._conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS releases (
-                id TEXT PRIMARY KEY,
-                identity_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                release_type TEXT NOT NULL CHECK (release_type IN ('album', 'single', 'ep', 'compilation', 'soundtrack', 'live', 'remix', 'other')),
-                release_date TEXT NOT NULL,
-                label TEXT,
-                catalog_number TEXT,
-                cover_url TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS release_tracks (
-                id TEXT PRIMARY KEY,
-                release_id TEXT NOT NULL,
-                version_id TEXT NOT NULL,
-                track_number INTEGER NOT NULL,
-                disc_number INTEGER NOT NULL DEFAULT 1,
-                duration_ms INTEGER,
-                isrc TEXT,
-                explicit INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (release_id) REFERENCES releases(id)
-            )
-            """
-        )
-        self._conn.commit()
 
     def get_release(self, release_id: str) -> Optional[Release]:
         cursor = self._conn.execute(
@@ -222,38 +295,6 @@ class SQLiteResolutionRepository(ResolutionRepository):
 
     def __init__(self, conn: sqlite3.Connection):
         self._conn = conn
-
-    def _ensure_tables(self) -> None:
-        cursor = self._conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS resolutions (
-                resolution_id TEXT PRIMARY KEY,
-                version_id TEXT NOT NULL,
-                source_id TEXT,
-                confidence_value REAL NOT NULL,
-                availability_status TEXT NOT NULL CHECK (availability_status IN ('unknown', 'available', 'unavailable', 'stale')),
-                resolved_at TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (version_id) REFERENCES versions(id)
-            )
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS resolution_evidence (
-                id TEXT PRIMARY KEY,
-                resolution_id TEXT NOT NULL,
-                evidence_type TEXT NOT NULL CHECK (evidence_type IN ('metadata_match', 'acoustic_fingerprint', 'isrc_match', 'mbid_match', 'file_hash', 'user_confirmation', 'provider_assertion')),
-                weight REAL NOT NULL,
-                description TEXT,
-                source_id TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (resolution_id) REFERENCES resolutions(resolution_id)
-            )
-            """
-        )
-        self._conn.commit()
 
     def get(self, resolution_id: str) -> Optional[Resolution]:
         cursor = self._conn.execute(
@@ -398,16 +439,4 @@ class SQLiteResolutionRepository(ResolutionRepository):
                         evidence.source_id,
                     ),
                 )
-        self._conn.commit()
-
-    def _run_migrations(self) -> None:
-        """Run database migrations for this repository."""
-        cursor = self._conn.cursor()
-        # Version 1: Initial resolution tables
-        cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='resolutions'"
-        )
-        if not cursor.fetchone():
-            # Create tables (already done in _ensure_tables)
-            pass
         self._conn.commit()

@@ -7,6 +7,7 @@ from .library import LibraryEntry, FileStatus
 from .release import Release, ReleaseTrack
 from .resolution import Resolution
 from .playback import QueueItem, PlaybackConfig, PlaybackState, PlaybackPosition
+from .lyrics import Lyrics, LyricsSearchQuery, LyricsType, LyricsSource
 
 
 class IdentityRepository(ABC):
@@ -170,3 +171,27 @@ class AudioBackend(ABC):
 
     @abstractmethod
     def on_error(self, callback) -> None: ...
+
+
+class LyricsRepository(ABC):
+    """Repositório para letras."""
+    @abstractmethod
+    def get(self, version_id: str) -> Lyrics | None: ...
+
+    @abstractmethod
+    def add(self, lyrics: Lyrics) -> None: ...
+
+    @abstractmethod
+    def update(self, lyrics: Lyrics) -> None: ...
+
+    @abstractmethod
+    def delete(self, version_id: str) -> None: ...
+
+
+class LyricsProvider(ABC):
+    """Provedor externo de letras (LRCLIB, Genius, etc.)."""
+    @abstractmethod
+    def search(self, query: LyricsSearchQuery) -> list[Lyrics]: ...
+
+    @abstractmethod
+    def fetch_by_id(self, provider_id: str) -> Lyrics | None: ...

@@ -9,6 +9,7 @@ from mim.mcm.domain.release import Release, ReleaseTrack, ReleaseType
 from mim.mcm.domain.resolution import Resolution, Evidence, EvidenceType
 from mim.mcm.domain.library import LibraryEntry, FileStatus
 from mim.mcm.domain.playback import QueueItem, PlaybackState, PlaybackPosition, PlaybackConfig, RepeatMode, ShuffleMode
+from mim.mcm.domain.lyrics import Lyrics, LyricsLine, LyricsType, LyricsSource
 from mim.mcm.domain.ports import (
     IdentityRepository,
     VersionRepository,
@@ -610,4 +611,67 @@ class SQLitePlaybackStateRepository:
                 "gapless": config.gapless,
             }),),
         )
+        self._conn.commit()
+
+
+class SQLiteLyricsRepository:
+    """Implementação SQLite do repositório de letras."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def get(self, version_id: str) -> Optional[Lyrics]:
+        row = self._conn.execute(
+            "SELECT version_id, lyrics_type, source, content, language, fetched_at FROM lyrics WHERE version_id = ?",
+            (version_id,),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        # Load synced lines
+        lines = []
+        if row["lyrics_type"] == "synced":
+            line_rows = self._conn.execute(
+                "SELECT timestamp_ms, text, translation, line_order FROM lyrics_lines WHERE version_id = ? ORDER BY line_order",
+                (version_id,),
+            ).fetchall()
+            for lr in line_rows:
+                lines.append(LyricsLine(
+                    timestamp_ms=lr["timestamp_ms"],
+                    text=lr["text"],
+                    translation=lr["translation"],
+                ))
+
+        return Lyrics(
+            version_id=row["version_id"],
+            lyrics_type=LyricsType(row["lyrics_type"]),
+            source=LyricsSource(row["source"]),
+            content=row["content"],
+            lines=lines,
+            language=row["language"],
+            fetched_at=row["fetched_at"],
+        )
+
+    def add(self, lyrics: Lyrics) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO lyrics (version_id, lyrics_type, source, content, language, fetched_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+            (lyrics.version_id, lyrics.lyrics_type.value, lyrics.source.value, lyrics.content, lyrics.language, lyrics.fetched_at),
+        )
+        # Delete existing lines
+        self._conn.execute("DELETE FROM lyrics_lines WHERE version_id = ?", (lyrics.version_id,))
+        # Insert new lines
+        for idx, line in enumerate(lyrics.lines):
+            self._conn.execute(
+                "INSERT INTO lyrics_lines (id, version_id, timestamp_ms, text, translation, line_order) VALUES (?, ?, ?, ?, ?, ?)",
+                (str(uuid4()), lyrics.version_id, line.timestamp_ms, line.text, line.translation, idx),
+            )
+        self._conn.commit()
+
+    def update(self, lyrics: Lyrics) -> None:
+        self.add(lyrics)  # Upsert pattern
+
+    def delete(self, version_id: str) -> None:
+        self._conn.execute("DELETE FROM lyrics WHERE version_id = ?", (version_id,))
+        self._conn.execute("DELETE FROM lyrics_lines WHERE version_id = ?", (version_id,))
         self._conn.commit()

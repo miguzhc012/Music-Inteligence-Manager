@@ -133,6 +133,29 @@ class SQLiteDatabase:
                     FOREIGN KEY (resolution_id) REFERENCES resolutions(resolution_id)
                 );
                 """
+            ),
+            (
+                4,
+                """
+                CREATE TABLE IF NOT EXISTS playback_queue (
+                    id TEXT PRIMARY KEY,
+                    version_id TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    position INTEGER NOT NULL,
+                    added_at TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS playback_state (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS playback_config (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
+                """
             )
         ]
 

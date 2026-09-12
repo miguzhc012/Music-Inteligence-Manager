@@ -6,6 +6,7 @@ from .source import Source
 from .library import LibraryEntry, FileStatus
 from .release import Release, ReleaseTrack
 from .resolution import Resolution
+from .playback import QueueItem, PlaybackConfig, PlaybackState, PlaybackPosition
 
 
 class IdentityRepository(ABC):
@@ -94,3 +95,78 @@ class LibraryEntryRepository(ABC):
 
     @abstractmethod
     def list_all(self) -> list[LibraryEntry]: ...
+
+
+class QueueRepository(ABC):
+    """Repositório para fila de reprodução."""
+    @abstractmethod
+    def add(self, item: QueueItem) -> None: ...
+
+    @abstractmethod
+    def get(self, item_id: str) -> QueueItem | None: ...
+
+    @abstractmethod
+    def get_queue(self) -> list[QueueItem]: ...
+
+    @abstractmethod
+    def remove(self, item_id: str) -> None: ...
+
+    @abstractmethod
+    def clear(self) -> None: ...
+
+    @abstractmethod
+    def reorder(self, item_id: str, new_position: int) -> None: ...
+
+
+class PlaybackStateRepository(ABC):
+    """Repositório para estado de reprodução persistido."""
+    @abstractmethod
+    def get_state(self) -> PlaybackState: ...
+
+    @abstractmethod
+    def set_state(self, state: PlaybackState) -> None: ...
+
+    @abstractmethod
+    def get_position(self) -> PlaybackPosition: ...
+
+    @abstractmethod
+    def set_position(self, position: PlaybackPosition) -> None: ...
+
+    @abstractmethod
+    def get_config(self) -> PlaybackConfig: ...
+
+    @abstractmethod
+    def set_config(self, config: PlaybackConfig) -> None: ...
+
+
+class AudioBackend(ABC):
+    """Backend abstrato de reprodução de áudio."""
+    @abstractmethod
+    def load(self, source_id: str, path: str) -> None: ...
+
+    @abstractmethod
+    def play(self) -> None: ...
+
+    @abstractmethod
+    def pause(self) -> None: ...
+
+    @abstractmethod
+    def stop(self) -> None: ...
+
+    @abstractmethod
+    def seek(self, position_ms: int) -> None: ...
+
+    @abstractmethod
+    def set_volume(self, volume: float) -> None: ...
+
+    @abstractmethod
+    def get_position(self) -> int: ...
+
+    @abstractmethod
+    def get_duration(self) -> int: ...
+
+    @abstractmethod
+    def on_end(self, callback) -> None: ...
+
+    @abstractmethod
+    def on_error(self, callback) -> None: ...

@@ -8,6 +8,7 @@ from mim.mcm.domain.source import Source, SourceType
 from mim.mcm.domain.release import Release, ReleaseTrack, ReleaseType
 from mim.mcm.domain.resolution import Resolution, Evidence, EvidenceType
 from mim.mcm.domain.library import LibraryEntry, FileStatus
+from mim.mcm.domain.playback import QueueItem, PlaybackState, PlaybackPosition, PlaybackConfig, RepeatMode, ShuffleMode
 from mim.mcm.domain.ports import (
     IdentityRepository,
     VersionRepository,
@@ -439,4 +440,174 @@ class SQLiteResolutionRepository(ResolutionRepository):
                         evidence.source_id,
                     ),
                 )
+        self._conn.commit()
+
+
+class SQLiteQueueRepository:
+    """Implementação SQLite do repositório de Queue."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def add(self, item: QueueItem) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO playback_queue (id, version_id, source_id, position, added_at) VALUES (?, ?, ?, ?, ?)",
+            (item.id, item.version_id, item.source_id, item.position, item.added_at),
+        )
+        self._conn.commit()
+
+    def get(self, item_id: str) -> Optional[QueueItem]:
+        row = self._conn.execute(
+            "SELECT id, version_id, source_id, position, added_at FROM playback_queue WHERE id = ?",
+            (item_id,),
+        ).fetchone()
+
+        if row:
+            return QueueItem(
+                id=row["id"],
+                version_id=row["version_id"],
+                source_id=row["source_id"],
+                position=row["position"],
+                added_at=row["added_at"],
+            )
+
+        return None
+
+    def get_queue(self) -> List[QueueItem]:
+        rows = self._conn.execute(
+            "SELECT id, version_id, source_id, position, added_at FROM playback_queue ORDER BY position"
+        ).fetchall()
+
+        return [
+            QueueItem(
+                id=row["id"],
+                version_id=row["version_id"],
+                source_id=row["source_id"],
+                position=row["position"],
+                added_at=row["added_at"],
+            )
+            for row in rows
+        ]
+
+    def remove(self, item_id: str) -> None:
+        self._conn.execute(
+            "DELETE FROM playback_queue WHERE id = ?",
+            (item_id,),
+        )
+        self._conn.commit()
+
+    def clear(self) -> None:
+        self._conn.execute("DELETE FROM playback_queue")
+        self._conn.commit()
+
+    def reorder(self, item_id: str, new_position: int) -> None:
+        """Move item to new position, shifting other items as needed."""
+        # Get current position of the item
+        row = self._conn.execute(
+            "SELECT position FROM playback_queue WHERE id = ?",
+            (item_id,),
+        ).fetchone()
+        
+        if not row:
+            return
+        
+        old_position = row["position"]
+        
+        if old_position == new_position:
+            return
+        
+        if old_position < new_position:
+            # Moving down: shift items between old+1 and new up by -1
+            self._conn.execute(
+                "UPDATE playback_queue SET position = position - 1 WHERE position > ? AND position <= ?",
+                (old_position, new_position),
+            )
+        else:
+            # Moving up: shift items between new and old-1 down by +1
+            self._conn.execute(
+                "UPDATE playback_queue SET position = position + 1 WHERE position >= ? AND position < ?",
+                (new_position, old_position),
+            )
+        
+        # Update the item's position
+        self._conn.execute(
+            "UPDATE playback_queue SET position = ? WHERE id = ?",
+            (new_position, item_id),
+        )
+        self._conn.commit()
+
+
+class SQLitePlaybackStateRepository:
+    """Implementação SQLite do repositório de estado de playback."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def get_state(self) -> PlaybackState:
+        row = self._conn.execute(
+            "SELECT value FROM playback_state WHERE key = 'state'"
+        ).fetchone()
+
+        if row:
+            return PlaybackState(row["value"])
+
+        return PlaybackState.STOPPED
+
+    def set_state(self, state: PlaybackState) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO playback_state (key, value) VALUES ('state', ?)",
+            (state.value,),
+        )
+        self._conn.commit()
+
+    def get_position(self) -> PlaybackPosition:
+        row = self._conn.execute(
+            "SELECT value FROM playback_state WHERE key = 'position'"
+        ).fetchone()
+
+        if row:
+            import json
+            data = json.loads(row["value"])
+            return PlaybackPosition(current_ms=data.get("current_ms", 0), duration_ms=data.get("duration_ms", 0))
+
+        return PlaybackPosition()
+
+    def set_position(self, position: PlaybackPosition) -> None:
+        import json
+        self._conn.execute(
+            "INSERT OR REPLACE INTO playback_state (key, value) VALUES ('position', ?)",
+            (json.dumps({"current_ms": position.current_ms, "duration_ms": position.duration_ms}),),
+        )
+        self._conn.commit()
+
+    def get_config(self) -> PlaybackConfig:
+        row = self._conn.execute(
+            "SELECT value FROM playback_config WHERE key = 'config'"
+        ).fetchone()
+
+        if row:
+            import json
+            data = json.loads(row["value"])
+            return PlaybackConfig(
+                volume=data.get("volume", 1.0),
+                repeat_mode=RepeatMode(data.get("repeat_mode", "off")),
+                shuffle_mode=ShuffleMode(data.get("shuffle_mode", "off")),
+                crossfade_ms=data.get("crossfade_ms", 0),
+                gapless=data.get("gapless", True),
+            )
+
+        return PlaybackConfig()
+
+    def set_config(self, config: PlaybackConfig) -> None:
+        import json
+        self._conn.execute(
+            "INSERT OR REPLACE INTO playback_config (key, value) VALUES ('config', ?)",
+            (json.dumps({
+                "volume": config.volume,
+                "repeat_mode": config.repeat_mode.value,
+                "shuffle_mode": config.shuffle_mode.value,
+                "crossfade_ms": config.crossfade_ms,
+                "gapless": config.gapless,
+            }),),
+        )
         self._conn.commit()

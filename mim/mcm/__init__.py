@@ -8,9 +8,9 @@ from .domain.confidence import Confidence
 from .domain.release import Release, ReleaseTrack, ReleaseType
 from .domain.resolution import Resolution, Evidence, EvidenceType
 
-from .infrastructure.sqlite_db import SQLiteReleaseRepository
 from .infrastructure.repositories import (
     SQLiteLibraryEntryRepository,
+    SQLiteReleaseRepository,
     SQLiteResolutionRepository,
 )
 from .infrastructure.sqlite_db import SQLiteDatabase

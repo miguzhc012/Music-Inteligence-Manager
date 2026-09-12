@@ -34,7 +34,6 @@ class SQLiteDatabase:
 
     def _run_migrations(self) -> None:
         assert self._conn is not None
-
         cursor = self._conn.cursor()
 
         cursor.execute(
@@ -50,6 +49,7 @@ class SQLiteDatabase:
             "SELECT MAX(version) FROM schema_version"
         ).fetchone()[0] or 0
 
+        # Migrations registry
         migrations = [
             (
                 1,
@@ -59,155 +59,94 @@ class SQLiteDatabase:
                     path TEXT UNIQUE NOT NULL,
                     status TEXT NOT NULL
                         CHECK (status IN ('PRESENT', 'MISSING'))
-                )
-                """,
+                );
+                CREATE TABLE IF NOT EXISTS identities (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    artist TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS versions (
+                    id TEXT PRIMARY KEY,
+                    identity_id TEXT NOT NULL,
+                    label TEXT NOT NULL,
+                    FOREIGN KEY (identity_id) REFERENCES identities(id)
+                );
+                CREATE TABLE IF NOT EXISTS sources (
+                    id TEXT PRIMARY KEY,
+                    version_id TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    FOREIGN KEY (version_id) REFERENCES versions(id)
+                );
+                """
             ),
+            (
+                2,
+                """
+                CREATE TABLE IF NOT EXISTS releases (
+                    id TEXT PRIMARY KEY,
+                    identity_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    release_type TEXT NOT NULL CHECK (release_type IN ('album', 'single', 'ep', 'compilation', 'soundtrack', 'live', 'remix', 'other')),
+                    release_date TEXT NOT NULL,
+                    label TEXT,
+                    catalog_number TEXT,
+                    cover_url TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (identity_id) REFERENCES versions(id)
+                );
+                CREATE TABLE IF NOT EXISTS release_tracks (
+                    id TEXT PRIMARY KEY,
+                    release_id TEXT NOT NULL,
+                    version_id TEXT NOT NULL,
+                    track_number INTEGER NOT NULL,
+                    disc_number INTEGER NOT NULL DEFAULT 1,
+                    duration_ms INTEGER,
+                    isrc TEXT,
+                    explicit INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (release_id) REFERENCES releases(id),
+                    FOREIGN KEY (version_id) REFERENCES versions(id)
+                );
+                """
+            ),
+            (
+                3,
+                """
+                CREATE TABLE IF NOT EXISTS resolutions (
+                    resolution_id TEXT PRIMARY KEY,
+                    version_id TEXT NOT NULL,
+                    source_id TEXT,
+                    confidence_value REAL NOT NULL,
+                    availability_status TEXT NOT NULL CHECK (availability_status IN ('unknown', 'available', 'unavailable', 'stale')),
+                    resolved_at TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (version_id) REFERENCES versions(id)
+                );
+                CREATE TABLE IF NOT EXISTS resolution_evidence (
+                    id TEXT PRIMARY KEY,
+                    resolution_id TEXT NOT NULL,
+                    evidence_type TEXT NOT NULL CHECK (evidence_type IN ('metadata_match', 'acoustic_fingerprint', 'isrc_match', 'mbid_match', 'file_hash', 'user_confirmation', 'provider_assertion')),
+                    weight REAL NOT NULL,
+                    description TEXT,
+                    source_id TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (resolution_id) REFERENCES resolutions(resolution_id)
+                );
+                """
+            )
         ]
 
-        for version, sql in migrations:
+        for version, sql_script in migrations:
             if version > current:
-                cursor.execute(sql)
+                for statement in sql_script.split(";"):
+                    if statement.strip():
+                        cursor.execute(statement)
                 cursor.execute(
                     "INSERT INTO schema_version (version) VALUES (?)",
                     (version,),
                 )
 
         self._conn.commit()
-
-
-class SQLiteReleaseRepository(ReleaseRepository):
-    """Implementação SQLite para Release e ReleaseTrack."""
-
-    def __init__(self, conn: sqlite3.Connection):
-        self._conn = conn
-
-    def _ensure_tables(self) -> None:
-        cursor = self._conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS releases (
-                id TEXT PRIMARY KEY,
-                identity_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                release_type TEXT NOT NULL CHECK (release_type IN ('album', 'single', 'ep', 'compilation', 'soundtrack', 'live', 'remix', 'other')),
-                release_date TEXT NOT NULL,
-                label TEXT,
-                catalog_number TEXT,
-                cover_url TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS release_tracks (
-                id TEXT PRIMARY KEY,
-                release_id TEXT NOT NULL,
-                version_id TEXT NOT NULL,
-                track_number INTEGER NOT NULL,
-                disc_number INTEGER NOT NULL DEFAULT 1,
-                duration_ms INTEGER,
-                isrc TEXT,
-                explicit INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (release_id) REFERENCES releases(id)
-            )
-            """
-        )
-        self._conn.commit()
-
-    def get_release(self, release_id: str) -> Optional[Release]:
-        cursor = self._conn.execute(
-            "SELECT id, identity_id, title, release_type, release_date, label, catalog_number, cover_url "
-            "FROM releases WHERE id = ?",
-            (release_id,)
-        ).fetchone()
-        if not cursor:
-            return None
-        return Release(
-            id=cursor["id"],
-            identity_id=cursor["identity_id"],
-            title=cursor["title"],
-            release_type=ReleaseType(cursor["release_type"].lower()),
-            release_date=cursor["release_date"],
-            label=cursor["label"],
-            catalog_number=cursor["catalog_number"],
-            cover_url=cursor["cover_url"],
-        )
-
-    def add_release(self, release: Release) -> None:
-        self._conn.execute(
-            "INSERT OR REPLACE INTO releases (id, identity_id, title, release_type, release_date, label, catalog_number, cover_url) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                release.id,
-                release.identity_id,
-                release.title,
-                release.release_type.value,
-                release.release_date,
-                release.label,
-                release.catalog_number,
-                release.cover_url,
-            ),
-        )
-        self._conn.commit()
-
-    def get_tracks_by_release(self, release_id: str) -> list[ReleaseTrack]:
-        cursor = self._conn.execute(
-            "SELECT id, release_id, version_id, track_number, disc_number, duration_ms, isrc, explicit "
-            "FROM release_tracks WHERE release_id = ?",
-            (release_id,)
-        ).fetchall()
-        return [
-            ReleaseTrack(
-                id=row["id"],
-                release_id=row["release_id"],
-                version_id=row["version_id"],
-                track_number=row["track_number"],
-                disc_number=row["disc_number"],
-                duration_ms=row["duration_ms"],
-                isrc=row["isrc"],
-                explicit=bool(row["explicit"]),
-            )
-            for row in cursor
-        ]
-
-    def add_track(self, track: ReleaseTrack) -> None:
-        self._conn.execute(
-            "INSERT OR REPLACE INTO release_tracks (id, release_id, version_id, track_number, disc_number, duration_ms, isrc, explicit) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                track.id,
-                track.release_id,
-                track.version_id,
-                track.track_number,
-                track.disc_number,
-                track.duration_ms,
-                track.isrc,
-                int(track.explicit),
-            ),
-        )
-        self._conn.commit()
-
-    def get_releases_by_identity(self, identity_id: str) -> list[Release]:
-        cursor = self._conn.execute(
-            "SELECT id, identity_id, title, release_type, release_date, label, catalog_number, cover_url "
-            "FROM releases WHERE identity_id = ?",
-            (identity_id,)
-        ).fetchall()
-        return [
-            Release(
-                id=row["id"],
-                identity_id=row["identity_id"],
-                title=row["title"],
-                release_type=ReleaseType(row["release_type"].lower()),
-                release_date=row["release_date"],
-                label=row["label"],
-                catalog_number=row["catalog_number"],
-                cover_url=row["cover_url"],
-            )
-            for row in cursor
-        ]
 
 
 def create_database(db_path: str) -> SQLiteDatabase:

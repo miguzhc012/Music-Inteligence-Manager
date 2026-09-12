@@ -8,6 +8,8 @@ from mim.mcm.infrastructure.repositories import (
     SQLiteLibraryEntryRepository,
     SQLiteReleaseRepository,
     SQLiteResolutionRepository,
+    SQLiteQueueRepository,
+    SQLitePlaybackStateRepository,
 )
 from mim.mcm.application.library_service import LibraryService, Scanner
 from mim.mcm.application.source_resolvers import (
@@ -19,6 +21,7 @@ from mim.mcm.application.source_resolvers import (
 )
 from mim.mcm.application.resolution_service import ResolutionService, ResolutionConfig
 from mim.mcm.application.release_service import ReleaseService
+from mim.mcm.application.playback_service import PlaybackService, MutagenAudioBackend, ResolutionApplicationService
 from mim.mcm.infrastructure.watcher import DirectoryWatcher
 
 
@@ -32,6 +35,8 @@ source_repo = SQLiteSourceRepository(conn)
 library_repo = SQLiteLibraryEntryRepository(conn)
 release_repo = SQLiteReleaseRepository(conn)
 resolution_repo = SQLiteResolutionRepository(conn)
+queue_repo = SQLiteQueueRepository(conn)
+state_repo = SQLitePlaybackStateRepository(conn)
 
 # 2. Configurar serviços de aplicação
 library_service = LibraryService(library_repo)
@@ -64,6 +69,23 @@ resolution_service = ResolutionService(
 
 release_service = ReleaseService(release_repo)
 
+# Playback services
+audio_backend = MutagenAudioBackend()
+playback_service = PlaybackService(
+    queue_repo=queue_repo,
+    state_repo=state_repo,
+    source_repo=source_repo,
+    library_repo=library_repo,
+    audio_backend=audio_backend,
+)
+
+resolution_app_service = ResolutionApplicationService(
+    resolution_service=resolution_service,
+    playback_service=playback_service,
+    source_repo=source_repo,
+    library_repo=library_repo,
+)
+
 # 3. Escaneamento inicial
 musicas_dir = "/home/miguel/Músicas"
 scanner = Scanner(library_service)
@@ -85,6 +107,8 @@ try:
     print("  - ReleaseService (release)")
     print("  - ResolutionService (resolution)")
     print("  - ResolverChain (local->cache->remote->download)")
+    print("  - PlaybackService (queue, repeat, shuffle, seek, volume)")
+    print("  - ResolutionApplicationService (resolve + play)")
     pass
 finally:
     watcher.stop()

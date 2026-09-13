@@ -1,9 +1,11 @@
 README.md
 pyproject.toml
 mim/__init__.py
+mim/cli.py
 mim.egg-info/PKG-INFO
 mim.egg-info/SOURCES.txt
 mim.egg-info/dependency_links.txt
+mim.egg-info/entry_points.txt
 mim.egg-info/requires.txt
 mim.egg-info/top_level.txt
 mim/mcl/__init__.py
@@ -17,15 +19,18 @@ mim/mcl/infrastructure/__init__.py
 mim/mcl/interfaces/__init__.py
 mim/mcm/__init__.py
 mim/mcm/application/__init__.py
+mim/mcm/application/discovery_service.py
 mim/mcm/application/library_service.py
 mim/mcm/application/lyrics_service.py
 mim/mcm/application/playback_service.py
+mim/mcm/application/recommendation_service.py
 mim/mcm/application/release_service.py
 mim/mcm/application/resolution_service.py
 mim/mcm/application/source_resolvers.py
 mim/mcm/domain/__init__.py
 mim/mcm/domain/availability.py
 mim/mcm/domain/confidence.py
+mim/mcm/domain/discovery.py
 mim/mcm/domain/history.py
 mim/mcm/domain/identity.py
 mim/mcm/domain/library.py
@@ -33,6 +38,7 @@ mim/mcm/domain/lyrics.py
 mim/mcm/domain/materialization.py
 mim/mcm/domain/playback.py
 mim/mcm/domain/ports.py
+mim/mcm/domain/recommendation.py
 mim/mcm/domain/release.py
 mim/mcm/domain/resolution.py
 mim/mcm/domain/source.py
@@ -47,6 +53,7 @@ mim/mcm/infrastructure/migrations/004_add_playback_tables.py
 mim/mcm/infrastructure/migrations/005_add_lyrics_tables.py
 mim/mcm/infrastructure/migrations/006_add_materialization_tables.py
 mim/mcm/infrastructure/migrations/007_add_history_tables.py
+mim/mcm/infrastructure/migrations/008_add_discovery_tables.py
 mim/mcm/interfaces/__init__.py
 mim/shared/__init__.py
 mim/shared/config.py

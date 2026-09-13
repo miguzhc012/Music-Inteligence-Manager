@@ -13,64 +13,31 @@ O MIM é uma plataforma pessoal de música com o objetivo de permitir que o usu�
 ```
 MIM — MUSIC IA MANAGER
 ├── MCM (MIM Core)
-│   ├── Domain: Identity, Version, Source, Release, Resolution, Playback, Lyrics, Materialization, History
+│   ├── Domain: Identity, Version, Source, Release, Resolution, Playback, Lyrics, Materialization, History, Discovery, Recommendation
 │   ├── Ports: Repository interfaces e contratos
 │   ├── Application: Services e resolvers
-│   └── Infrastructure: SQLite repos, migrations, watcher
+│   └── Infrastructure: SQLite repos (8 repositories), migrations (v8), watcher
 ├── MCL (Mobile/Control Layer)
 │   ├── Domain: Device, Session, Permission
 │   └── Application: [Futuro]
 └── Shared: Config, Logging, Events, DI
 ```
 
-## Fase 3 - Consolidada
+## Estado Atual
 
-A Fase 3 foi completada com sucesso, implementando:
+### Fase 3 - CONCLUÍDA ✅
+- **Resolution Engine**: Evidence-based resolution com confidence scoring
+- **SourceResolver Chain**: Local → Cache → Remote → Download (custo zero primeiro)
+- **PlaybackService**: Queue management, repeat/shuffle/seek/volume controls
+- **LyricsService**: Synced/unsynced lyrics com providers locais/remotos
+- **Materialization**: Tracking de estado físico (cached/downloaded) por device
+- **History**: Event tracking e listening stats
 
-### Entidades de Domínio
-- **Identity**: Obra musical abstrata (título + artista)
-- **Version**: Variação específica da obra (normal, acoustic, live)
-- **Source**: Origem concreta (local, remote, download)
-- **Release**: Contexto de lançamento (álbum, single, EP)
-- **ReleaseTrack**: Ocorrência de Version em Release
-- **Resolution**: Resultado da resolução Version → Source com evidências
-- **Confidence**: Score de confiança (0.0-1.0)
-- **Availability**: Disponibilidade da source
-- **Materialization**: Estado físico/lógico (cached, downloaded)
-- **Playback**: Queue, estado, config, positions
-- **Lyrics**: Letras sincronizadas e não-sincronizadas
-- **History**: Eventos de playback e estatísticas de escuta
-
-### Repositórios SQLite
-- SQLiteIdentityRepository
-- SQLiteVersionRepository
-- SQLiteSourceRepository
-- SQLiteLibraryEntryRepository
-- SQLiteReleaseRepository
-- SQLiteResolutionRepository
-- SQLiteQueueRepository
-- SQLitePlaybackStateRepository
-- SQLiteLyricsRepository
-- SQLiteMaterializationRepository
-- SQLiteDeviceStorageRepository
-- SQLiteHistoryRepository
-- SQLitePlaySessionRepository
-
-### Serviços de Aplicação
-- **LibraryService**: Gerenciamento de library local
-- **Scanner**: Escaneamento e reconciliação de arquivos
-- **ResolutionService**: Resolução Version → Source com confidence
-- **ResolverChain**: Chain local→cache→remote→download (custo zero primeiro)
-- **ReleaseService**: CRUD de releases e tracks
-- **PlaybackService**: Fila, repeat, shuffle, seek, volume
-- **LyricsService**: Fetch/salvar letras (local/embedded/remote)
-- **ResolutionApplicationService**: Orquestra resolução + materialização + playback
-
-### Infraestrutura
-- Migration runner automático (schema v1 a v7)
-- DirectoryWatcher com watchdog
-- Config management com dotenv
-- Event bus para comunicação assíncrona
+### Fase 4 - EM ANDAMENTO 🔄
+- **Discovery Domain**: SearchMatch, AcousticProfile
+- **Recommendation Domain**: Recommendations, UserTasteProfile, AudioFeatures
+- **Repositories**: 5 novos repositórios SQLite implementados
+- **Schema**: Migration v8 adicionando tabelas de discovery
 
 ## Testes
 
@@ -78,13 +45,30 @@ A Fase 3 foi completada com sucesso, implementando:
 # Executar todos os testes
 pytest tests/ -v
 
-# Executar testes específicos
-pytest tests/unit/application/test_playback_service.py -v
-pytest tests/unit/infrastructure/test_lyrics_repository.py -v
-pytest tests/integration/test_migrations.py -v
+# Resultados atuais: 77 testes passando
 ```
 
-**Status: 71 testes passando**
+## Status das Fases
+
+```
+FASE 1 ████████████████████ CONCLUÍDA
+FASE 2 ████████████████████ ACEITA
+FASE 3 ████████████████████ CONCLUÍDA
+FASE 4 ████████████░░░░░░░░ DESIGN / IMPLEMENTAÇÃO
+FASE 5 ░░░░░░░░░░░░░░░░░░░ PROJETO
+```
+
+## Commits Recentes
+
+```
+0574718 fix(discovery): add auto-generated id to SearchMatch dataclass
+ceb443c test: fix discovery repository tests with proper FK setup
+a750d6c feat(discovery): implement repositories for discovery, acoustic profiles, recommendations, and audio features
+bcb6f53 feat(discovery): add domain models and migrations for discovery/recommendation engine (Phase 4)
+53d2e45 feat(history): implement HistoryRepository, PlaySessionRepository, and associated domain models
+92c9cd9 feat(materialization): implement MaterializationService with quality tracking
+...
+```
 
 ## Execução
 
@@ -98,22 +82,13 @@ pip install -e ".[dev]"
 python run_dev.py
 ```
 
-## Próximas Fases (Planejadas)
+## Próximos Passos
 
-- **Fase 4**: Discovery Engine - Busca por título/artista, busca acústica, ISRC match
-- **Fase 5**: Recommendation Engine - Recomendações baseadas em histórico
-- **Fase 6**: Provider Integration - Spotify, YouTube, Apple Music APIs
-- **Fase 7**: Multi-device Sync - Sincronização entre dispositivos
-- **Fase 8**: CLI/GUI - Interface para usuário final
-
-## Status das Fases
-
-```
-FASE 1 ████████████████████ CONCLUÍDA
-FASE 2 ████████████████████ ACEITA
-FASE 3 ████████████████████ CONCLUÍDA
-FASE 4 ░░░░░░░░░░░░░░░░░░░ PROJETO
-```
+1. Implementar **DiscoveryService** com algoritmos de busca (title/artist matching)
+2. Implementar **RecommendationService** com collaborative filtering básico
+3. Adicionar **acoustic fingerprinting** usando librosa
+4. Criar **CLI simples** para interação com o usuário
+5. Adicionar **provider externo** (LRCLIB para letras, Spotify para recomendações)
 
 ## Contribuição
 
@@ -135,6 +110,7 @@ Este projeto segue TDD (Test-Driven Development) e DDD (Domain-Driven Design).
 - `feat(infra): ...` - Mudanças na infraestrutura
 - `test: ...` - Adição de testes
 - `refactor: ...` - Refatoração sem mudança de behavior
+- `fix: ...` - Correção de bug
 
 ## Licença
 

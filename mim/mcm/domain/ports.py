@@ -10,6 +10,8 @@ from .playback import QueueItem, PlaybackConfig, PlaybackState, PlaybackPosition
 from .lyrics import Lyrics, LyricsSearchQuery, LyricsType, LyricsSource
 from .materialization import Materialization, MaterializationState, MaterializationQuality, DeviceStorage
 from .history import HistoryEvent, HistoryEventType, PlaySession, ListeningStats
+from .discovery import SearchQuery, SearchMatch, DiscoveryMethod, MatchQuality, AcousticProfile
+from .recommendation import Recommendation, RecommendationType, SimilarityAlgorithm, UserTasteProfile, AudioFeature
 
 
 class IdentityRepository(ABC):
@@ -281,3 +283,93 @@ class PlaySessionRepository(ABC):
 
     @abstractmethod
     def list_by_device(self, device_id: str) -> list[PlaySession]: ...
+
+
+class DiscoveryRepository(ABC):
+    """Repositório para matches de descoberta."""
+    @abstractmethod
+    def save_match(self, match: SearchMatch) -> None: ...
+
+    @abstractmethod
+    def get_matches(self, identity_id: str) -> list[SearchMatch]: ...
+
+    @abstractmethod
+    def get_by_version(self, version_id: str) -> list[SearchMatch]: ...
+
+    @abstractmethod
+    def get_best_match(self, identity_id: str, max_score: float = 0.8) -> SearchMatch | None: ...
+
+
+class AcousticProfileRepository(ABC):
+    """Repositório para perfis acústicos."""
+    @abstractmethod
+    def get(self, version_id: str) -> AcousticProfile | None: ...
+
+    @abstractmethod
+    def add(self, profile: AcousticProfile) -> None: ...
+
+    @abstractmethod
+    def update(self, profile: AcousticProfile) -> None: ...
+
+    @abstractmethod
+    def delete(self, version_id: str) -> None: ...
+
+    @abstractmethod
+    def find_similar(self, profile: AcousticProfile, limit: int = 10) -> list[AcousticProfile]: ...
+
+
+class RecommendationRepository(ABC):
+    """Repositório para recomendações."""
+    @abstractmethod
+    def add(self, recommendation: Recommendation) -> None: ...
+
+    @abstractmethod
+    def get(self, recommendation_id: str) -> Recommendation | None: ...
+
+    @abstractmethod
+    def get_by_source(self, source_version_id: str, limit: int = 10) -> list[Recommendation]: ...
+
+    @abstractmethod
+    def get_by_identity(self, identity_id: str, limit: int = 20) -> list[Recommendation]: ...
+
+    @abstractmethod
+    def delete(self, recommendation_id: str) -> None: ...
+
+    @abstractmethod
+    def get_recent(self, limit: int = 50) -> list[Recommendation]: ...
+
+
+class UserTasteProfileRepository(ABC):
+    """Repositório para perfis de gosto do usuário."""
+    @abstractmethod
+    def get(self, user_id: str) -> UserTasteProfile | None: ...
+
+    @abstractmethod
+    def add(self, profile: UserTasteProfile) -> None: ...
+
+    @abstractmethod
+    def update(self, profile: UserTasteProfile) -> None: ...
+
+    @abstractmethod
+    def delete(self, user_id: str) -> None: ...
+
+    @abstractmethod
+    def list_all(self) -> list[UserTasteProfile]: ...
+
+
+class AudioFeatureRepository(ABC):
+    """Repositório para features de áudio."""
+    @abstractmethod
+    def get(self, version_id: str) -> AudioFeature | None: ...
+
+    @abstractmethod
+    def add(self, feature: AudioFeature) -> None: ...
+
+    @abstractmethod
+    def update(self, feature: AudioFeature) -> None: ...
+
+    @abstractmethod
+    def delete(self, version_id: str) -> None: ...
+
+    @abstractmethod
+    def find_similar(self, feature: AudioFeature, limit: int = 10) -> list[AudioFeature]: ...

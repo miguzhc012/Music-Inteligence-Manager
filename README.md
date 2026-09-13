@@ -1,13 +1,3 @@
-Metadata-Version: 2.4
-Name: mim
-Version: 0.1.0
-Summary: MIM – Music Integration Manager
-Requires-Python: >=3.10
-Description-Content-Type: text/markdown
-Requires-Dist: watchdog>=3.0.0
-Provides-Extra: dev
-Requires-Dist: pytest>=7.0.0; extra == "dev"
-
 # MIM — Music Intelligence Manager
 
 > Sistema pessoal de música orientado a Library, Metadata, Discovery, Playback, IA, dispositivos e múltiplas fontes.

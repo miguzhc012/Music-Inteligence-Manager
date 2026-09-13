@@ -1,5 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+from uuid import uuid4
 
 
 class MatchQuality(str, Enum):
@@ -52,6 +53,7 @@ class SearchMatch:
     score: float = 0.0
     method: DiscoveryMethod = DiscoveryMethod.TITLE_MATCH
     metadata: dict | None = None
+    id: str = field(default_factory=lambda: str(uuid4()))
     
     def __post_init__(self):
         if self.metadata is None:

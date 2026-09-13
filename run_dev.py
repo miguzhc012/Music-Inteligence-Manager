@@ -11,6 +11,15 @@ from mim.mcm.infrastructure.repositories import (
     SQLiteQueueRepository,
     SQLitePlaybackStateRepository,
     SQLiteLyricsRepository,
+    SQLiteMaterializationRepository,
+    SQLiteDeviceStorageRepository,
+    SQLiteHistoryRepository,
+    SQLitePlaySessionRepository,
+    SQLiteDiscoveryRepository,
+    SQLiteAcousticProfileRepository,
+    SQLiteRecommendationRepository,
+    SQLiteUserTasteProfileRepository,
+    SQLiteAudioFeatureRepository,
 )
 from mim.mcm.application.library_service import LibraryService, Scanner
 from mim.mcm.application.source_resolvers import (
@@ -24,6 +33,8 @@ from mim.mcm.application.resolution_service import ResolutionService, Resolution
 from mim.mcm.application.release_service import ReleaseService
 from mim.mcm.application.playback_service import PlaybackService, MutagenAudioBackend, ResolutionApplicationService
 from mim.mcm.application.lyrics_service import LyricsService, LocalLyricsProvider, EmbeddedLyricsProvider
+from mim.mcm.application.discovery_service import DiscoveryService, AcousticAnalysisService
+from mim.mcm.application.recommendation_service import RecommendationService, UserTasteService
 from mim.mcm.infrastructure.watcher import DirectoryWatcher
 
 
@@ -40,6 +51,15 @@ resolution_repo = SQLiteResolutionRepository(conn)
 queue_repo = SQLiteQueueRepository(conn)
 state_repo = SQLitePlaybackStateRepository(conn)
 lyrics_repo = SQLiteLyricsRepository(conn)
+materialization_repo = SQLiteMaterializationRepository(conn)
+device_storage_repo = SQLiteDeviceStorageRepository(conn)
+history_repo = SQLiteHistoryRepository(conn)
+session_repo = SQLitePlaySessionRepository(conn)
+discovery_repo = SQLiteDiscoveryRepository(conn)
+acoustic_repo = SQLiteAcousticProfileRepository(conn)
+recommendation_repo = SQLiteRecommendationRepository(conn)
+taste_repo = SQLiteUserTasteProfileRepository(conn)
+audio_feature_repo = SQLiteAudioFeatureRepository(conn)
 
 # 2. Configurar serviços de aplicação
 library_service = LibraryService(library_repo)
@@ -100,6 +120,29 @@ lyrics_service = LyricsService(
     identity_repo=identity_repo,
 )
 
+# Discovery services
+discovery_service = DiscoveryService(
+    discovery_repo=discovery_repo,
+    version_repo=version_repo,
+    identity_repo=identity_repo,
+)
+
+acoustic_service = AcousticAnalysisService(
+    acoustic_repo=acoustic_repo,
+)
+
+# Recommendation services
+recommendation_service = RecommendationService(
+    recommendation_repo=recommendation_repo,
+    user_taste_repo=taste_repo,
+    audio_feature_repo=audio_feature_repo,
+    history_repo=history_repo,
+)
+
+user_taste_service = UserTasteService(
+    taste_repo=taste_repo,
+)
+
 # 3. Escaneamento inicial
 musicas_dir = "/home/miguel/Músicas"
 scanner = Scanner(library_service)
@@ -116,14 +159,17 @@ watcher.start()
 
 try:
     # App rodando - aqui viria a UI/API/CLI
-    print("MIM Fase 3 rodando. Serviços disponíveis:")
-    print("  - LibraryService (library)")
-    print("  - ReleaseService (release)")
-    print("  - ResolutionService (resolution)")
-    print("  - ResolverChain (local->cache->remote->download)")
-    print("  - PlaybackService (queue, repeat, shuffle, seek, volume)")
-    print("  - ResolutionApplicationService (resolve + play)")
-    print("  - LyricsService (synced/unsynced, local/embedded/remote)")
+    print("\nMIM Music Intelligence Manager - Rodando!")
+    print("=" * 50)
+    print("Serviços disponíveis:")
+    print("  [Library]    LibraryService, Scanner")
+    print("  [Resolution] ResolutionService, ResolverChain")
+    print("  [Playback]   PlaybackService (queue, repeat, shuffle)")
+    print("  [Lyrics]     LyricsService (synced/unsynced)")
+    print("  [Discovery]  DiscoveryService, AcousticAnalysis")
+    print("  [Recommend]  RecommendationService, UserTasteService")
+    print("  [History]    History tracking, Listening stats")
+    print("=" * 50)
     pass
 finally:
     watcher.stop()

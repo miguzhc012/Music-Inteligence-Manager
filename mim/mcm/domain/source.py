@@ -5,6 +5,7 @@ class SourceType(str, Enum):
     LOCAL = "local"
     REMOTE = "remote"
     DOWNLOAD = "download"
+    UNKNOWN = "unknown"
 
 @dataclass(frozen=True)
 class Source:

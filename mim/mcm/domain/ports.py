@@ -21,6 +21,9 @@ class IdentityRepository(ABC):
     @abstractmethod
     def add(self, identity: Identity) -> None: ...
 
+    @abstractmethod
+    def get_by_title_and_artist(self, title: str, artist: str) -> list[Identity]: ...
+
 
 class VersionRepository(ABC):
     @abstractmethod
@@ -29,6 +32,9 @@ class VersionRepository(ABC):
     @abstractmethod
     def add(self, version: Version) -> None: ...
 
+    @abstractmethod
+    def get_by_identity(self, identity_id: str) -> list[Version]: ...
+
 
 class SourceRepository(ABC):
     @abstractmethod
@@ -36,6 +42,9 @@ class SourceRepository(ABC):
 
     @abstractmethod
     def add(self, source: Source) -> None: ...
+
+    @abstractmethod
+    def get_by_version(self, version_id: str) -> list[Source]: ...
 
 
 class ReleaseRepository(ABC):

@@ -12,6 +12,8 @@ from mim.mcm.domain.playback import QueueItem, PlaybackState, PlaybackPosition, 
 from mim.mcm.domain.lyrics import Lyrics, LyricsLine, LyricsType, LyricsSource
 from mim.mcm.domain.materialization import Materialization, MaterializationState, MaterializationQuality, DeviceStorage
 from mim.mcm.domain.history import HistoryEvent, HistoryEventType, PlaySession, ListeningStats
+from mim.mcm.domain.discovery import SearchQuery, SearchMatch, DiscoveryMethod, MatchQuality, AcousticProfile
+from mim.mcm.domain.recommendation import Recommendation, RecommendationType, SimilarityAlgorithm, UserTasteProfile, AudioFeature
 from mim.mcm.domain.ports import (
     IdentityRepository,
     VersionRepository,
@@ -1088,6 +1090,428 @@ class SQLitePlaySessionRepository:
                 ended_at=row["ended_at"],
                 total_tracks=row["total_tracks"],
                 total_listening_ms=row["total_listening_ms"],
+            )
+            for row in rows
+        ]
+
+
+
+class SQLiteDiscoveryRepository:
+    """Implementação SQLite do repositório de discovery/matches."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def save_match(self, match: SearchMatch) -> None:
+        import json
+        self._conn.execute(
+            "INSERT OR REPLACE INTO search_matches (id, identity_id, title, artist, version_id, source_id, release_id, album, quality, score, method, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (match.id, match.identity_id, match.title, match.artist, match.version_id, match.source_id, match.release_id, match.album, match.quality.value, match.score, match.method.value, json.dumps(match.metadata)),
+        )
+        self._conn.commit()
+
+    def get_matches(self, identity_id: str) -> List[SearchMatch]:
+        import json
+        rows = self._conn.execute(
+            "SELECT id, identity_id, title, artist, version_id, source_id, release_id, album, quality, score, method, metadata FROM search_matches WHERE identity_id = ? ORDER BY score DESC",
+            (identity_id,),
+        ).fetchall()
+
+        return [
+            SearchMatch(
+                id=row["id"],
+                identity_id=row["identity_id"],
+                title=row["title"],
+                artist=row["artist"],
+                version_id=row["version_id"],
+                source_id=row["source_id"],
+                release_id=row["release_id"],
+                album=row["album"],
+                quality=MatchQuality(row["quality"]),
+                score=row["score"],
+                method=DiscoveryMethod(row["method"]),
+                metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+            )
+            for row in rows
+        ]
+
+    def get_by_version(self, version_id: str) -> List[SearchMatch]:
+        import json
+        rows = self._conn.execute(
+            "SELECT id, identity_id, title, artist, version_id, source_id, release_id, album, quality, score, method, metadata FROM search_matches WHERE version_id = ? ORDER BY score DESC",
+            (version_id,),
+        ).fetchall()
+
+        return [
+            SearchMatch(
+                id=row["id"],
+                identity_id=row["identity_id"],
+                title=row["title"],
+                artist=row["artist"],
+                version_id=row["version_id"],
+                source_id=row["source_id"],
+                release_id=row["release_id"],
+                album=row["album"],
+                quality=MatchQuality(row["quality"]),
+                score=row["score"],
+                method=DiscoveryMethod(row["method"]),
+                metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+            )
+            for row in rows
+        ]
+
+    def get_best_match(self, identity_id: str, max_score: float = 0.8) -> Optional[SearchMatch]:
+        import json
+        row = self._conn.execute(
+            "SELECT id, identity_id, title, artist, version_id, source_id, release_id, album, quality, score, method, metadata FROM search_matches WHERE identity_id = ? AND score >= ? ORDER BY score DESC LIMIT 1",
+            (identity_id, max_score),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        return SearchMatch(
+            id=row["id"],
+            identity_id=row["identity_id"],
+            title=row["title"],
+            artist=row["artist"],
+            version_id=row["version_id"],
+            source_id=row["source_id"],
+            release_id=row["release_id"],
+            album=row["album"],
+            quality=MatchQuality(row["quality"]),
+            score=row["score"],
+            method=DiscoveryMethod(row["method"]),
+            metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+        )
+
+
+class SQLiteAcousticProfileRepository:
+    """Implementação SQLite do repositório de perfis acústicos."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def get(self, version_id: str) -> Optional[AcousticProfile]:
+        row = self._conn.execute(
+            "SELECT version_id, tempo_bpm, key, mode, duration_ms, energy, danceability, valence, audio_features, fingerprint_hash FROM acoustic_profiles WHERE version_id = ?",
+            (version_id,),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        import json
+        audio_features = json.loads(row["audio_features"]) if row["audio_features"] else None
+
+        return AcousticProfile(
+            version_id=row["version_id"],
+            tempo_bpm=row["tempo_bpm"],
+            key=row["key"],
+            mode=row["mode"],
+            duration_ms=row["duration_ms"],
+            energy=row["energy"],
+            danceability=row["danceability"],
+            valence=row["valence"],
+            audio_features=audio_features,
+            fingerprint_hash=row["fingerprint_hash"],
+        )
+
+    def add(self, profile: AcousticProfile) -> None:
+        import json
+        self._conn.execute(
+            "INSERT OR REPLACE INTO acoustic_profiles (version_id, tempo_bpm, key, mode, duration_ms, energy, danceability, valence, audio_features, fingerprint_hash, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+            (profile.version_id, profile.tempo_bpm, profile.key, profile.mode, profile.duration_ms, profile.energy, profile.danceability, profile.valence, json.dumps(profile.audio_features), profile.fingerprint_hash),
+        )
+        self._conn.commit()
+
+    def update(self, profile: AcousticProfile) -> None:
+        self.add(profile)
+
+    def delete(self, version_id: str) -> None:
+        self._conn.execute("DELETE FROM acoustic_profiles WHERE version_id = ?", (version_id,))
+        self._conn.commit()
+
+    def find_similar(self, profile: AcousticProfile, limit: int = 10) -> List[AcousticProfile]:
+        import json
+        if profile.energy is not None:
+            rows = self._conn.execute(
+                "SELECT version_id, tempo_bpm, key, mode, duration_ms, energy, danceability, valence, audio_features, fingerprint_hash FROM acoustic_profiles WHERE version_id != ? AND ABS(energy - ?) < 0.2 ORDER BY ABS(energy - ?) ASC LIMIT ?",
+                (profile.version_id, profile.energy, profile.energy, limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT version_id, tempo_bpm, key, mode, duration_ms, energy, danceability, valence, audio_features, fingerprint_hash FROM acoustic_profiles WHERE version_id != ? LIMIT ?",
+                (profile.version_id, limit),
+            ).fetchall()
+
+        return [
+            AcousticProfile(
+                version_id=row["version_id"],
+                tempo_bpm=row["tempo_bpm"],
+                key=row["key"],
+                mode=row["mode"],
+                duration_ms=row["duration_ms"],
+                energy=row["energy"],
+                danceability=row["danceability"],
+                valence=row["valence"],
+                audio_features=json.loads(row["audio_features"]) if row["audio_features"] else None,
+                fingerprint_hash=row["fingerprint_hash"],
+            )
+            for row in rows
+        ]
+
+
+class SQLiteRecommendationRepository:
+    """Implementação SQLite do repositório de recomendações."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def add(self, recommendation: Recommendation) -> None:
+        import json
+        self._conn.execute(
+            "INSERT INTO recommendations (id, source_version_id, target_identity_id, target_version_id, target_source_id, type, algorithm, similarity_score, confidence, context, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (recommendation.id, recommendation.source_version_id, recommendation.target_identity_id, recommendation.target_version_id, recommendation.target_source_id, recommendation.type.value, recommendation.algorithm.value, recommendation.similarity_score, recommendation.confidence, json.dumps(recommendation.context), recommendation.created_at),
+        )
+        self._conn.commit()
+
+    def get(self, recommendation_id: str) -> Optional[Recommendation]:
+        import json
+        row = self._conn.execute(
+            "SELECT id, source_version_id, target_identity_id, target_version_id, target_source_id, type, algorithm, similarity_score, confidence, context, created_at FROM recommendations WHERE id = ?",
+            (recommendation_id,),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        return Recommendation(
+            id=row["id"],
+            source_version_id=row["source_version_id"],
+            target_identity_id=row["target_identity_id"],
+            target_version_id=row["target_version_id"],
+            target_source_id=row["target_source_id"],
+            type=RecommendationType(row["type"]),
+            algorithm=SimilarityAlgorithm(row["algorithm"]),
+            similarity_score=row["similarity_score"],
+            confidence=row["confidence"],
+            context=json.loads(row["context"]) if row["context"] else {},
+            created_at=row["created_at"],
+        )
+
+    def get_by_source(self, source_version_id: str, limit: int = 10) -> List[Recommendation]:
+        import json
+        rows = self._conn.execute(
+            "SELECT id, source_version_id, target_identity_id, target_version_id, target_source_id, type, algorithm, similarity_score, confidence, context, created_at FROM recommendations WHERE source_version_id = ? ORDER BY similarity_score DESC LIMIT ?",
+            (source_version_id, limit),
+        ).fetchall()
+
+        return [
+            Recommendation(
+                id=row["id"],
+                source_version_id=row["source_version_id"],
+                target_identity_id=row["target_identity_id"],
+                target_version_id=row["target_version_id"],
+                target_source_id=row["target_source_id"],
+                type=RecommendationType(row["type"]),
+                algorithm=SimilarityAlgorithm(row["algorithm"]),
+                similarity_score=row["similarity_score"],
+                confidence=row["confidence"],
+                context=json.loads(row["context"]) if row["context"] else {},
+                created_at=row["created_at"],
+            )
+            for row in rows
+        ]
+
+    def get_by_identity(self, identity_id: str, limit: int = 20) -> List[Recommendation]:
+        import json
+        rows = self._conn.execute(
+            "SELECT id, source_version_id, target_identity_id, target_version_id, target_source_id, type, algorithm, similarity_score, confidence, context, created_at FROM recommendations WHERE target_identity_id = ? ORDER BY similarity_score DESC LIMIT ?",
+            (identity_id, limit),
+        ).fetchall()
+
+        return [
+            Recommendation(
+                id=row["id"],
+                source_version_id=row["source_version_id"],
+                target_identity_id=row["target_identity_id"],
+                target_version_id=row["target_version_id"],
+                target_source_id=row["target_source_id"],
+                type=RecommendationType(row["type"]),
+                algorithm=SimilarityAlgorithm(row["algorithm"]),
+                similarity_score=row["similarity_score"],
+                confidence=row["confidence"],
+                context=json.loads(row["context"]) if row["context"] else {},
+                created_at=row["created_at"],
+            )
+            for row in rows
+        ]
+
+    def delete(self, recommendation_id: str) -> None:
+        self._conn.execute("DELETE FROM recommendations WHERE id = ?", (recommendation_id,))
+        self._conn.commit()
+
+    def get_recent(self, limit: int = 50) -> List[Recommendation]:
+        import json
+        rows = self._conn.execute(
+            "SELECT id, source_version_id, target_identity_id, target_version_id, target_source_id, type, algorithm, similarity_score, confidence, context, created_at FROM recommendations ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+
+        return [
+            Recommendation(
+                id=row["id"],
+                source_version_id=row["source_version_id"],
+                target_identity_id=row["target_identity_id"],
+                target_version_id=row["target_version_id"],
+                target_source_id=row["target_source_id"],
+                type=RecommendationType(row["type"]),
+                algorithm=SimilarityAlgorithm(row["algorithm"]),
+                similarity_score=row["similarity_score"],
+                confidence=row["confidence"],
+                context=json.loads(row["context"]) if row["context"] else {},
+                created_at=row["created_at"],
+            )
+            for row in rows
+        ]
+
+
+class SQLiteUserTasteProfileRepository:
+    """Implementação SQLite do repositório de perfis de gosto."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def get(self, user_id: str) -> Optional[UserTasteProfile]:
+        import json
+        row = self._conn.execute(
+            "SELECT user_id, favorite_artists, favorite_genres, listening_count, total_ms_listened, skip_rate, repeat_rate, last_updated FROM user_taste_profiles WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        return UserTasteProfile(
+            user_id=row["user_id"],
+            favorite_artists=json.loads(row["favorite_artists"]) if row["favorite_artists"] else [],
+            favorite_genres=json.loads(row["favorite_genres"]) if row["favorite_genres"] else [],
+            listening_count=row["listening_count"],
+            total_ms_listened=row["total_ms_listened"],
+            skip_rate=row["skip_rate"],
+            repeat_rate=row["repeat_rate"],
+            last_updated=row["last_updated"],
+        )
+
+    def add(self, profile: UserTasteProfile) -> None:
+        import json
+        self._conn.execute(
+            "INSERT OR REPLACE INTO user_taste_profiles (user_id, favorite_artists, favorite_genres, listening_count, total_ms_listened, skip_rate, repeat_rate, last_updated) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+            (profile.user_id, json.dumps(profile.favorite_artists), json.dumps(profile.favorite_genres), profile.listening_count, profile.total_ms_listened, profile.skip_rate, profile.repeat_rate),
+        )
+        self._conn.commit()
+
+    def update(self, profile: UserTasteProfile) -> None:
+        self.add(profile)
+
+    def delete(self, user_id: str) -> None:
+        self._conn.execute("DELETE FROM user_taste_profiles WHERE user_id = ?", (user_id,))
+        self._conn.commit()
+
+    def list_all(self) -> List[UserTasteProfile]:
+        import json
+        rows = self._conn.execute(
+            "SELECT user_id, favorite_artists, favorite_genres, listening_count, total_ms_listened, skip_rate, repeat_rate, last_updated FROM user_taste_profiles"
+        ).fetchall()
+
+        return [
+            UserTasteProfile(
+                user_id=row["user_id"],
+                favorite_artists=json.loads(row["favorite_artists"]) if row["favorite_artists"] else [],
+                favorite_genres=json.loads(row["favorite_genres"]) if row["favorite_genres"] else [],
+                listening_count=row["listening_count"],
+                total_ms_listened=row["total_ms_listened"],
+                skip_rate=row["skip_rate"],
+                repeat_rate=row["repeat_rate"],
+                last_updated=row["last_updated"],
+            )
+            for row in rows
+        ]
+
+
+class SQLiteAudioFeatureRepository:
+    """Implementação SQLite do repositório de features de áudio."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def get(self, version_id: str) -> Optional[AudioFeature]:
+        row = self._conn.execute(
+            "SELECT version_id, tempo_bpm, key, mode, energy, danceability, valence, acousticness, instrumentalness, liveness, speechiness, duration_ms, analyzed_at FROM audio_features WHERE version_id = ?",
+            (version_id,),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        return AudioFeature(
+            version_id=row["version_id"],
+            tempo_bpm=row["tempo_bpm"],
+            key=row["key"],
+            mode=row["mode"],
+            energy=row["energy"],
+            danceability=row["danceability"],
+            valence=row["valence"],
+            acousticness=row["acousticness"],
+            instrumentalness=row["instrumentalness"],
+            liveness=row["liveness"],
+            speechiness=row["speechiness"],
+            duration_ms=row["duration_ms"],
+            analyzed_at=row["analyzed_at"],
+        )
+
+    def add(self, feature: AudioFeature) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO audio_features (version_id, tempo_bpm, key, mode, energy, danceability, valence, acousticness, instrumentalness, liveness, speechiness, duration_ms, analyzed_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+            (feature.version_id, feature.tempo_bpm, feature.key, feature.mode, feature.energy, feature.danceability, feature.valence, feature.acousticness, feature.instrumentalness, feature.liveness, feature.speechiness, feature.duration_ms, feature.analyzed_at),
+        )
+        self._conn.commit()
+
+    def update(self, feature: AudioFeature) -> None:
+        self.add(feature)
+
+    def delete(self, version_id: str) -> None:
+        self._conn.execute("DELETE FROM audio_features WHERE version_id = ?", (version_id,))
+        self._conn.commit()
+
+    def find_similar(self, feature: AudioFeature, limit: int = 10) -> List[AudioFeature]:
+        if feature.energy is not None and feature.valence is not None:
+            rows = self._conn.execute(
+                "SELECT version_id, tempo_bpm, key, mode, energy, danceability, valence, acousticness, instrumentalness, liveness, speechiness, duration_ms, analyzed_at FROM audio_features WHERE version_id != ? AND ABS(energy - ?) < 0.15 AND ABS(valence - ?) < 0.15 ORDER BY (ABS(energy - ?) + ABS(valence - ?)) ASC LIMIT ?",
+                (feature.version_id, feature.energy, feature.valence, feature.energy, feature.valence, limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT version_id, tempo_bpm, key, mode, energy, danceability, valence, acousticness, instrumentalness, liveness, speechiness, duration_ms, analyzed_at FROM audio_features WHERE version_id != ? LIMIT ?",
+                (feature.version_id, limit),
+            ).fetchall()
+
+        return [
+            AudioFeature(
+                version_id=row["version_id"],
+                tempo_bpm=row["tempo_bpm"],
+                key=row["key"],
+                mode=row["mode"],
+                energy=row["energy"],
+                danceability=row["danceability"],
+                valence=row["valence"],
+                acousticness=row["acousticness"],
+                instrumentalness=row["instrumentalness"],
+                liveness=row["liveness"],
+                speechiness=row["speechiness"],
+                duration_ms=row["duration_ms"],
+                analyzed_at=row["analyzed_at"],
             )
             for row in rows
         ]

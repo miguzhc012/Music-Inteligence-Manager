@@ -9,6 +9,7 @@ from .resolution import Resolution
 from .playback import QueueItem, PlaybackConfig, PlaybackState, PlaybackPosition
 from .lyrics import Lyrics, LyricsSearchQuery, LyricsType, LyricsSource
 from .materialization import Materialization, MaterializationState, MaterializationQuality, DeviceStorage
+from .history import HistoryEvent, HistoryEventType, PlaySession, ListeningStats
 
 
 class IdentityRepository(ABC):
@@ -235,3 +236,48 @@ class DeviceStorageRepository(ABC):
 
     @abstractmethod
     def list_all(self) -> list[DeviceStorage]: ...
+
+
+class HistoryRepository(ABC):
+    """Repositório para eventos de histórico."""
+    @abstractmethod
+    def add(self, event: HistoryEvent) -> None: ...
+
+    @abstractmethod
+    def get(self, event_id: str) -> HistoryEvent | None: ...
+
+    @abstractmethod
+    def get_by_version(self, version_id: str, limit: int = 100) -> list[HistoryEvent]: ...
+
+    @abstractmethod
+    def get_by_session(self, session_id: str) -> list[HistoryEvent]: ...
+
+    @abstractmethod
+    def get_by_device(self, device_id: str, limit: int = 100) -> list[HistoryEvent]: ...
+
+    @abstractmethod
+    def get_by_type(self, event_type: HistoryEventType, limit: int = 100) -> list[HistoryEvent]: ...
+
+    @abstractmethod
+    def get_recent(self, limit: int = 100) -> list[HistoryEvent]: ...
+
+    @abstractmethod
+    def get_stats(self, version_id: str) -> ListeningStats | None: ...
+
+
+class PlaySessionRepository(ABC):
+    """Repositório para sessões de reprodução."""
+    @abstractmethod
+    def add(self, session: PlaySession) -> None: ...
+
+    @abstractmethod
+    def get(self, session_id: str) -> PlaySession | None: ...
+
+    @abstractmethod
+    def get_active(self, device_id: str) -> PlaySession | None: ...
+
+    @abstractmethod
+    def update(self, session: PlaySession) -> None: ...
+
+    @abstractmethod
+    def list_by_device(self, device_id: str) -> list[PlaySession]: ...

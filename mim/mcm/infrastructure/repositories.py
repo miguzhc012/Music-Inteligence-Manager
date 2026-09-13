@@ -11,6 +11,7 @@ from mim.mcm.domain.library import LibraryEntry, FileStatus
 from mim.mcm.domain.playback import QueueItem, PlaybackState, PlaybackPosition, PlaybackConfig, RepeatMode, ShuffleMode
 from mim.mcm.domain.lyrics import Lyrics, LyricsLine, LyricsType, LyricsSource
 from mim.mcm.domain.materialization import Materialization, MaterializationState, MaterializationQuality, DeviceStorage
+from mim.mcm.domain.history import HistoryEvent, HistoryEventType, PlaySession, ListeningStats
 from mim.mcm.domain.ports import (
     IdentityRepository,
     VersionRepository,
@@ -839,6 +840,254 @@ class SQLiteDeviceStorageRepository:
                 total_bytes=row["total_bytes"],
                 free_bytes=row["free_bytes"],
                 path=row["path"],
+            )
+            for row in rows
+        ]
+
+
+class SQLiteHistoryRepository:
+    """Implementação SQLite do repositório de histórico."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def add(self, event: HistoryEvent) -> None:
+        import json
+        self._conn.execute(
+            "INSERT INTO history_events (id, event_type, version_id, source_id, device_id, session_id, timestamp, position_ms, duration_ms, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (event.id, event.event_type.value, event.version_id, event.source_id, event.device_id, event.session_id, event.timestamp, event.position_ms, event.duration_ms, json.dumps(event.metadata)),
+        )
+        self._conn.commit()
+
+    def get(self, event_id: str) -> Optional[HistoryEvent]:
+        import json
+        row = self._conn.execute(
+            "SELECT id, event_type, version_id, source_id, device_id, session_id, timestamp, position_ms, duration_ms, metadata FROM history_events WHERE id = ?",
+            (event_id,),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        return HistoryEvent(
+            id=row["id"],
+            event_type=HistoryEventType(row["event_type"]),
+            version_id=row["version_id"],
+            source_id=row["source_id"],
+            device_id=row["device_id"],
+            session_id=row["session_id"],
+            timestamp=row["timestamp"],
+            position_ms=row["position_ms"],
+            duration_ms=row["duration_ms"],
+            metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+        )
+
+    def get_by_version(self, version_id: str, limit: int = 100) -> List[HistoryEvent]:
+        import json
+        rows = self._conn.execute(
+            "SELECT id, event_type, version_id, source_id, device_id, session_id, timestamp, position_ms, duration_ms, metadata FROM history_events WHERE version_id = ? ORDER BY timestamp DESC LIMIT ?",
+            (version_id, limit),
+        ).fetchall()
+
+        return [
+            HistoryEvent(
+                id=row["id"],
+                event_type=HistoryEventType(row["event_type"]),
+                version_id=row["version_id"],
+                source_id=row["source_id"],
+                device_id=row["device_id"],
+                session_id=row["session_id"],
+                timestamp=row["timestamp"],
+                position_ms=row["position_ms"],
+                duration_ms=row["duration_ms"],
+                metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+            )
+            for row in rows
+        ]
+
+    def get_by_session(self, session_id: str) -> List[HistoryEvent]:
+        import json
+        rows = self._conn.execute(
+            "SELECT id, event_type, version_id, source_id, device_id, session_id, timestamp, position_ms, duration_ms, metadata FROM history_events WHERE session_id = ? ORDER BY timestamp",
+            (session_id,),
+        ).fetchall()
+
+        return [
+            HistoryEvent(
+                id=row["id"],
+                event_type=HistoryEventType(row["event_type"]),
+                version_id=row["version_id"],
+                source_id=row["source_id"],
+                device_id=row["device_id"],
+                session_id=row["session_id"],
+                timestamp=row["timestamp"],
+                position_ms=row["position_ms"],
+                duration_ms=row["duration_ms"],
+                metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+            )
+            for row in rows
+        ]
+
+    def get_by_device(self, device_id: str, limit: int = 100) -> List[HistoryEvent]:
+        import json
+        rows = self._conn.execute(
+            "SELECT id, event_type, version_id, source_id, device_id, session_id, timestamp, position_ms, duration_ms, metadata FROM history_events WHERE device_id = ? ORDER BY timestamp DESC LIMIT ?",
+            (device_id, limit),
+        ).fetchall()
+
+        return [
+            HistoryEvent(
+                id=row["id"],
+                event_type=HistoryEventType(row["event_type"]),
+                version_id=row["version_id"],
+                source_id=row["source_id"],
+                device_id=row["device_id"],
+                session_id=row["session_id"],
+                timestamp=row["timestamp"],
+                position_ms=row["position_ms"],
+                duration_ms=row["duration_ms"],
+                metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+            )
+            for row in rows
+        ]
+
+    def get_by_type(self, event_type: HistoryEventType, limit: int = 100) -> List[HistoryEvent]:
+        import json
+        rows = self._conn.execute(
+            "SELECT id, event_type, version_id, source_id, device_id, session_id, timestamp, position_ms, duration_ms, metadata FROM history_events WHERE event_type = ? ORDER BY timestamp DESC LIMIT ?",
+            (event_type.value, limit),
+        ).fetchall()
+
+        return [
+            HistoryEvent(
+                id=row["id"],
+                event_type=HistoryEventType(row["event_type"]),
+                version_id=row["version_id"],
+                source_id=row["source_id"],
+                device_id=row["device_id"],
+                session_id=row["session_id"],
+                timestamp=row["timestamp"],
+                position_ms=row["position_ms"],
+                duration_ms=row["duration_ms"],
+                metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+            )
+            for row in rows
+        ]
+
+    def get_recent(self, limit: int = 100) -> List[HistoryEvent]:
+        import json
+        rows = self._conn.execute(
+            "SELECT id, event_type, version_id, source_id, device_id, session_id, timestamp, position_ms, duration_ms, metadata FROM history_events ORDER BY timestamp DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+
+        return [
+            HistoryEvent(
+                id=row["id"],
+                event_type=HistoryEventType(row["event_type"]),
+                version_id=row["version_id"],
+                source_id=row["source_id"],
+                device_id=row["device_id"],
+                session_id=row["session_id"],
+                timestamp=row["timestamp"],
+                position_ms=row["position_ms"],
+                duration_ms=row["duration_ms"],
+                metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+            )
+            for row in rows
+        ]
+
+    def get_stats(self, version_id: str) -> Optional[ListeningStats]:
+        row = self._conn.execute(
+            "SELECT version_id, play_count, total_ms, skip_count, complete_count, last_played, first_played, avg_position_pct FROM listening_stats WHERE version_id = ?",
+            (version_id,),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        return ListeningStats(
+            version_id=row["version_id"],
+            play_count=row["play_count"],
+            total_ms=row["total_ms"],
+            skip_count=row["skip_count"],
+            complete_count=row["complete_count"],
+            last_played=row["last_played"],
+            first_played=row["first_played"],
+            avg_position_pct=row["avg_position_pct"],
+        )
+
+
+class SQLitePlaySessionRepository:
+    """Implementação SQLite do repositório de sessões de reprodução."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def add(self, session: PlaySession) -> None:
+        self._conn.execute(
+            "INSERT INTO play_sessions (id, device_id, started_at, ended_at, total_tracks, total_listening_ms) VALUES (?, ?, ?, ?, ?, ?)",
+            (session.id, session.device_id, session.started_at, session.ended_at, session.total_tracks, session.total_listening_ms),
+        )
+        self._conn.commit()
+
+    def get(self, session_id: str) -> Optional[PlaySession]:
+        row = self._conn.execute(
+            "SELECT id, device_id, started_at, ended_at, total_tracks, total_listening_ms FROM play_sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        return PlaySession(
+            id=row["id"],
+            device_id=row["device_id"],
+            started_at=row["started_at"],
+            ended_at=row["ended_at"],
+            total_tracks=row["total_tracks"],
+            total_listening_ms=row["total_listening_ms"],
+        )
+
+    def get_active(self, device_id: str) -> Optional[PlaySession]:
+        row = self._conn.execute(
+            "SELECT id, device_id, started_at, ended_at, total_tracks, total_listening_ms FROM play_sessions WHERE device_id = ? AND ended_at IS NULL LIMIT 1",
+            (device_id,),
+        ).fetchone()
+
+        if not row:
+            return None
+
+        return PlaySession(
+            id=row["id"],
+            device_id=row["device_id"],
+            started_at=row["started_at"],
+            ended_at=row["ended_at"],
+            total_tracks=row["total_tracks"],
+            total_listening_ms=row["total_listening_ms"],
+        )
+
+    def update(self, session: PlaySession) -> None:
+        self._conn.execute(
+            "UPDATE play_sessions SET ended_at = ?, total_tracks = ?, total_listening_ms = ? WHERE id = ?",
+            (session.ended_at, session.total_tracks, session.total_listening_ms, session.id),
+        )
+        self._conn.commit()
+
+    def list_by_device(self, device_id: str) -> List[PlaySession]:
+        rows = self._conn.execute(
+            "SELECT id, device_id, started_at, ended_at, total_tracks, total_listening_ms FROM play_sessions WHERE device_id = ? ORDER BY started_at DESC",
+            (device_id,),
+        ).fetchall()
+
+        return [
+            PlaySession(
+                id=row["id"],
+                device_id=row["device_id"],
+                started_at=row["started_at"],
+                ended_at=row["ended_at"],
+                total_tracks=row["total_tracks"],
+                total_listening_ms=row["total_listening_ms"],
             )
             for row in rows
         ]

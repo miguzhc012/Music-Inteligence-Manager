@@ -1,15 +1,20 @@
 import tempfile
 import os
 import pytest
+from uuid import uuid4
 
 from mim.mcm.infrastructure.sqlite_db import create_database
 from mim.mcm.infrastructure.repositories import (
+    SQLiteIdentityRepository,
+    SQLiteVersionRepository,
     SQLiteDiscoveryRepository,
     SQLiteAcousticProfileRepository,
     SQLiteRecommendationRepository,
     SQLiteUserTasteProfileRepository,
     SQLiteAudioFeatureRepository,
 )
+from mim.mcm.domain.identity import Identity
+from mim.mcm.domain.version import Version
 from mim.mcm.domain.discovery import SearchMatch, DiscoveryMethod, MatchQuality, AcousticProfile
 from mim.mcm.domain.recommendation import Recommendation, RecommendationType, SimilarityAlgorithm, UserTasteProfile, AudioFeature
 
@@ -19,6 +24,14 @@ def discovery_setup():
     tmp_db = tempfile.NamedTemporaryFile(delete=False).name
     db = create_database(tmp_db)
     conn = db._conn
+    
+    # Setup hierarchy for FK constraints
+    identity_repo = SQLiteIdentityRepository(conn)
+    version_repo = SQLiteVersionRepository(conn)
+    
+    identity_repo.add(Identity(id="id1", title="Test Song", artist="Test Artist"))
+    version_repo.add(Version(id="v1", identity_id="id1", label="Original"))
+    version_repo.add(Version(id="v2", identity_id="id1", label="Remix"))
     
     discovery_repo = SQLiteDiscoveryRepository(conn)
     acoustic_repo = SQLiteAcousticProfileRepository(conn)
@@ -42,7 +55,6 @@ def discovery_setup():
 def test_discovery_domain_entities():
     """Testa entidades de domínio de discovery."""
     match = SearchMatch(
-        id="m1",
         identity_id="id1",
         title="Bohemian Rhapsody",
         artist="Queen",
@@ -57,6 +69,7 @@ def test_discovery_domain_entities():
     assert match.identity_id == "id1"
     assert match.quality == MatchQuality.HIGH
     assert match.score == 0.95
+    assert match.metadata == {}  # Default empty dict
     
     profile = AcousticProfile(
         version_id="v1",
@@ -78,7 +91,6 @@ def test_search_match_repository(discovery_setup):
     repo = discovery_setup["discovery_repo"]
     
     match = SearchMatch(
-        id="m1",
         identity_id="id1",
         title="Test Song",
         artist="Test Artist",
@@ -95,6 +107,7 @@ def test_search_match_repository(discovery_setup):
     matches = repo.get_matches("id1")
     assert len(matches) == 1
     assert matches[0].title == "Test Song"
+    assert matches[0].score == 0.95
     
     # Get by version
     by_version = repo.get_by_version("v1")
@@ -104,7 +117,7 @@ def test_search_match_repository(discovery_setup):
     # Get best match
     best = repo.get_best_match("id1")
     assert best is not None
-    assert best.id == "m1"
+    assert best.title == "Test Song"
     
     # No match for non-existent
     no_match = repo.get_best_match("nonexistent")
@@ -119,6 +132,7 @@ def test_acoustic_profile_repository(discovery_setup):
         tempo_bpm=120.0,
         key="C",
         mode="major",
+        duration_ms=180000,
         energy=0.8,
         danceability=0.7,
         valence=0.9,
@@ -138,6 +152,7 @@ def test_acoustic_profile_repository(discovery_setup):
         tempo_bpm=125.0,
         key="C",
         mode="major",
+        duration_ms=185000,
         energy=0.85,
         danceability=0.75,
         valence=0.95,
@@ -147,9 +162,9 @@ def test_acoustic_profile_repository(discovery_setup):
     fetched = repo.get("v1")
     assert fetched.tempo_bpm == 125.0
     
-    # Find similar
+    # Find similar (only one in DB)
     similar = repo.find_similar(profile)
-    assert len(similar) == 0  # Only one in DB
+    assert len(similar) == 0  # No other profiles to compare
     
     # Delete
     repo.delete("v1")
@@ -175,6 +190,10 @@ def test_recommendation_repository(discovery_setup):
     by_source = repo.get_by_source("v1")
     assert len(by_source) == 1
     assert by_source[0].similarity_score == 0.85
+    
+    # Get by identity
+    by_identity = repo.get_by_identity("id1")
+    assert len(by_identity) == 1
     
     # Get recent
     recent = repo.get_recent()
@@ -257,9 +276,9 @@ def test_audio_feature_repository(discovery_setup):
     assert fetched.energy == 0.8
     assert fetched.valence == 0.9
     
-    # Find similar
+    # Find similar (only one in DB)
     similar = repo.find_similar(feature)
-    assert len(similar) == 0  # Only one in DB
+    assert len(similar) == 0  # No other features to compare
     
     # Delete
     repo.delete("v1")
